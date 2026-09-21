@@ -342,16 +342,19 @@ function closeSheet(name){$(name+'Sheet').classList.remove('open');setTimeout(()
    estimate (kg × distance × rate) and is editable per leg in the plan. */
 function computeLegs(){
   const p=state.plan; if(!p) return [];
-  const r=p.row, q=p.qty, rate=travelRate(), legs=[];
+  const r=p.row, rate=travelRate(), legs=[];
   const add=(from,to,kg)=>{
     kg=Math.round(kg*10)/10; if(kg<=0) return;
     const d=cityDist(from,to); if(d<=0) return;
     legs.push({from,to,kg,d,fee:Math.round(kg*d*rate)});
   };
-  if(r.kind==='flip') add(r.from,r.to,q*itemWeightKg(r.id));
+  /* Per-unit legs: planMath() is per-unit and the summary/log multiply by
+     quantity, so legs must not bake the quantity in (that double-counted
+     travel for qty > 1). */
+  if(r.kind==='flip') add(r.from,r.to,itemWeightKg(r.id));
   else{
-    for(const [city,ms] of matGroups()) add(city,r.from,q*ms.reduce((s,m)=>s+m.count*itemWeightKg(m.id),0));
-    add(r.from,r.to,q*(r.amountCrafted||1)*itemWeightKg(r.id));
+    for(const [city,ms] of matGroups()) add(city,r.from,ms.reduce((s,m)=>s+m.count*itemWeightKg(m.id),0));
+    add(r.from,r.to,(r.amountCrafted||1)*itemWeightKg(r.id));
   }
   return legs;
 }
@@ -465,8 +468,8 @@ function bindPlanInputs(){
   });
 }
 function travelStepLine(){
-  const legs=state.plan.legs||[];
-  return legs.length?`Fast-travel: ${legs.map(l=>`${l.from} → ${l.to} (${l.kg} kg, ${money(l.fee)} silver)`).join(' · ')}`:'No fast travel needed';
+  const p=state.plan, q=p?p.qty:1, legs=p?(p.legs||[]):[];
+  return legs.length?`Fast-travel: ${legs.map(l=>`${l.from} → ${l.to} (${Math.round(l.kg*q*10)/10} kg, ${money(l.fee*q)} silver)`).join(' · ')}`:'No fast travel needed';
 }
 function planStepTexts(){
   const p=state.plan,r=p.row,m=planMath(),q=p.qty;
