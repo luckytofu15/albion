@@ -77,6 +77,10 @@
           <button id="exportBtn" class="text-btn">CSV</button>
         </div>
         <div class="search-row"><input id="searchResults" type="search" inputmode="search" placeholder="Search item or city…" /></div>
+        <div class="segmented doubt-tabs" id="doubtTabs" aria-label="Result quality">
+          <button data-dtab="ok" class="active">Opportunities (<span id="okCount">0</span>)</button>
+          <button data-dtab="bad">Doubtful (<span id="badCount">0</span>)</button>
+        </div>
         <div id="scanMessage" class="scan-message">Your calculation assumptions are available under Filters.</div>
         <div id="mobileResults" class="mobile-results"></div>
         <div class="table-wrap">

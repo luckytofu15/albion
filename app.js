@@ -237,6 +237,44 @@ function craftRows(ids,prices,cities){
   } return out;
 }
 function prefilter(rows){ const minP=+$('minProfit').value,minR=+$('minRoi').value; return rows.filter(r=>r.profit>=minP&&r.roi>=minR).sort((a,b)=>b.profit-a.profit).slice(0,250); }
+/* ---- Sanity filter: quarantine bogus feed quotes ----
+   The Albion Data Project feed sometimes carries absurd quotes (a 40M buy
+   order on Beef Stew while every other city says ~3,700). Each opportunity is
+   checked against the cross-city median price for the item; failures move to
+   the Doubtful tab instead of polluting the rankings. */
+const DOUBT_SELL_MULT=8, DOUBT_BUY_DIV=8, DOUBT_SPREAD=100;
+function itemTypicalPrices(prices,maxAge){
+  const byId=new Map();
+  for(const p of prices){
+    if(!(p.sell_price_min>0))continue;
+    if(ageHours(p.sell_price_min_date)>maxAge)continue;
+    if(!byId.has(p.item_id))byId.set(p.item_id,[]);
+    byId.get(p.item_id).push(p.sell_price_min);
+  }
+  const med=new Map();
+  for(const [id,arr] of byId){
+    if(arr.length<2)continue; /* need 2+ cities to cross-check */
+    arr.sort((a,b)=>a-b); med.set(id,arr[arr.length>>1]);
+  }
+  return med;
+}
+function doubtReason(r,typical){
+  if(typical>0){
+    if(r.sell>typical*DOUBT_SELL_MULT)
+      return `Sell ${money(r.sell)} is ${Math.round(r.sell/typical)}× the typical ${money(Math.round(typical))} across cities — likely a bad quote`;
+    if(!r.mats&&r.buy>0&&r.buy<typical/DOUBT_BUY_DIV)
+      return `Buy ${money(r.buy)} is ${Math.round(typical/Math.max(1,r.buy))}× below the typical ${money(Math.round(typical))} — likely a bad quote`;
+  }
+  if(r.sell>0&&r.buy>0&&r.sell/r.buy>DOUBT_SPREAD)
+    return `Sell is ${Math.round(r.sell/Math.max(1,r.buy))}× the buy price — no real market moves like that`;
+  return null;
+}
+function splitDoubtful(rows,typical){
+  const ok=[],bad=[];
+  for(const r of rows){ const reason=doubtReason(r,typical.get(r.id)); if(reason){r.doubt=reason;r.score=0;bad.push(r)} else ok.push(r); }
+  bad.sort((a,b)=>b.profit-a.profit);
+  return {ok,bad};
+}
 async function addLiquidity(rows){
   if(!$('liquidity').checked||!rows.length||state.isDemo)return rows;
   const top=rows.slice(0,18),ids=[...new Set(top.map(r=>r.id))],locs=[...new Set(top.map(r=>r.to))];
@@ -281,10 +319,16 @@ function demoRows(){
 }
 
 function render(){
-  const q=$('searchResults').value.trim().toLowerCase(), rows=state.rows.filter(r=>!q||`${r.name} ${r.id} ${r.from} ${r.to}`.toLowerCase().includes(q));
+  const q=$('searchResults').value.trim().toLowerCase(), tab=state.doubtTab==='bad'?'bad':'ok',
+    pool=tab==='bad'?(state.doubtful||[]):state.rows,
+    rows=pool.filter(r=>!q||`${r.name} ${r.id} ${r.from} ${r.to}`.toLowerCase().includes(q));
   state.filtered=rows;
-  $('resultsBody').innerHTML=rows.map((r,i)=>`<tr><td><span class="score-pill">${r.score}</span></td><td><strong>${escapeHtml(r.name)}</strong><br><span class="tag">${escapeHtml(r.id)}</span></td><td><strong>${escapeHtml(r.from)}</strong> → <strong>${escapeHtml(r.to)}</strong><br><span class="tag">${escapeHtml(r.detail)}</span></td><td>${money(r.buy)}</td><td>${money(r.sell)}</td><td>${money(r.fees)}</td><td class="${r.profit>=0?'money-pos':'money-neg'}">${money(r.profit)}</td><td>${pct(r.roi)}</td><td>${r.volume==null?'—':fmt.format(Math.round(r.volume))}/d</td><td class="${r.age<=12?'fresh':'stale'}">${humanAge(r.age)}</td><td><button class="plan-btn" data-plan="${i}">Plan →</button></td></tr>`).join('');
-  $('mobileResults').innerHTML=rows.map((r,i)=>`<article class="result-card"><div class="result-top"><div class="score-box">${r.score}</div><div class="result-title"><strong>${escapeHtml(r.name)}</strong><span>${escapeHtml(r.from)} → ${escapeHtml(r.to)} · ${escapeHtml(r.detail)}</span></div><div class="profit-box"><strong>+${money(Math.max(0,r.profit))}</strong><span>${pct(r.roi)} ROI</span></div></div><div class="result-metrics"><div><b>${money(r.buy)}</b><span>Cost</span></div><div><b>${money(r.sell)}</b><span>Sell</span></div><div><b>${r.volume==null?'—':fmt.format(Math.round(r.volume))}</b><span>Vol/day</span></div><div><b>${humanAge(r.age)}</b><span>Age</span></div></div><button class="plan-btn plan-card-btn" data-plan="${i}">Plan this trade →</button></article>`).join('');
+  document.querySelectorAll('#doubtTabs button').forEach(b=>b.classList.toggle('active',b.dataset.dtab===tab));
+  $('okCount').textContent=`${state.rows.length}`; $('badCount').textContent=`${(state.doubtful||[]).length}`;
+  const pill=r=>tab==='bad'?`<span class="score-pill doubt-pill">⚠</span>`:`<span class="score-pill">${r.score}</span>`;
+  const why=r=>tab==='bad'&&r.doubt?`<span class="tag doubt-tag">⚠ ${escapeHtml(r.doubt)}</span>`:'';
+  $('resultsBody').innerHTML=rows.map((r,i)=>`<tr><td>${pill(r)}</td><td><strong>${escapeHtml(r.name)}</strong><br><span class="tag">${escapeHtml(r.id)}</span></td><td><strong>${escapeHtml(r.from)}</strong> → <strong>${escapeHtml(r.to)}</strong><br><span class="tag">${escapeHtml(r.detail)}</span>${why(r)}</td><td>${money(r.buy)}</td><td>${money(r.sell)}</td><td>${money(r.fees)}</td><td class="${r.profit>=0?'money-pos':'money-neg'}">${money(r.profit)}</td><td>${pct(r.roi)}</td><td>${r.volume==null?'—':fmt.format(Math.round(r.volume))}/d</td><td class="${r.age<=12?'fresh':'stale'}">${humanAge(r.age)}</td><td><button class="plan-btn" data-plan="${i}">Plan →</button></td></tr>`).join('');
+  $('mobileResults').innerHTML=rows.map((r,i)=>`<article class="result-card"><div class="result-top"><div class="score-box${tab==='bad'?' doubt-pill':''}">${tab==='bad'?'⚠':r.score}</div><div class="result-title"><strong>${escapeHtml(r.name)}</strong><span>${escapeHtml(r.from)} → ${escapeHtml(r.to)} · ${escapeHtml(r.detail)}</span></div><div class="profit-box"><strong>+${money(Math.max(0,r.profit))}</strong><span>${pct(r.roi)} ROI</span></div></div>${tab==='bad'&&r.doubt?`<div class="doubt-reason">⚠ ${escapeHtml(r.doubt)}</div>`:''}<div class="result-metrics"><div><b>${money(r.buy)}</b><span>Cost</span></div><div><b>${money(r.sell)}</b><span>Sell</span></div><div><b>${r.volume==null?'—':fmt.format(Math.round(r.volume))}</b><span>Vol/day</span></div><div><b>${humanAge(r.age)}</b><span>Age</span></div></div><button class="plan-btn plan-card-btn" data-plan="${i}">Plan this trade →</button></article>`).join('');
 
   const top=state.rows.slice(0,3);
   $('dailyCards').innerHTML=top.length?top.map((r,i)=>`<article class="daily-card"><span class="rank">#${i+1} · SCORE ${r.score}${state.isDemo?' · DEMO':''}</span><h4>${escapeHtml(r.name)}</h4><div class="route">${escapeHtml(r.from)} → ${escapeHtml(r.to)}</div><div class="daily-metrics"><div><strong>${money(r.profit)}</strong><span>NET SILVER</span></div><div><strong>${pct(r.roi)}</strong><span>ROI</span></div><div><strong>${r.volume==null?'—':fmt.format(Math.round(r.volume))}</strong><span>VOL/DAY</span></div></div></article>`).join(''):'<div class="empty-state"><strong>No opportunities pass your filters</strong><span>Lower minimum profit/ROI or broaden the markets.</span></div>';
@@ -303,14 +347,16 @@ async function scan(){
     let fetchIds=[...ids]; if(state.mode!=='flip')ids.forEach(id=>(state.recipes[id]?.materials||[]).forEach(m=>fetchIds.push(m.id))); fetchIds=[...new Set(fetchIds)];
     const prices=await apiPrices(fetchIds,cities),quotes=prices.filter(p=>p.sell_price_min>0||p.buy_price_max>0).length;
     $('coverage').textContent=`${Math.round(100*quotes/Math.max(1,fetchIds.length*cities.length))}%`; $('coverageSub').textContent=`${fmt.format(quotes)} usable quotes`;
-    let rows=state.mode==='flip'?flipRows(ids,prices,cities):craftRows(ids,prices,cities); rows=prefilter(rows); rows=await addLiquidity(rows); rows=scoreRows(rows); state.rows=rows.slice(0,150); render();
-    const now=new Date(); $('lastScan').textContent=now.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); setStatus('Live','live'); $('scanMessage').textContent=`Scanned ${fmt.format(fetchIds.length)} item IDs across ${cities.length} markets. ${state.rows.length} opportunities passed your filters.`;
+    let rows=state.mode==='flip'?flipRows(ids,prices,cities):craftRows(ids,prices,cities); rows=prefilter(rows);
+    const typical=itemTypicalPrices(prices,+$('maxAge').value), split=splitDoubtful(rows,typical);
+    rows=await addLiquidity(split.ok); rows=scoreRows(rows); state.rows=rows.slice(0,150); state.doubtful=split.bad.slice(0,150); render();
+    const now=new Date(); $('lastScan').textContent=now.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); setStatus('Live','live'); $('scanMessage').textContent=`Scanned ${fmt.format(fetchIds.length)} item IDs across ${cities.length} markets. ${state.rows.length} opportunities passed your filters.${state.doubtful.length?` ${state.doubtful.length} quarantined as doubtful.`:''}`;
     localStorage.setItem('albionProfitRadarLastScan',JSON.stringify({at:Date.now(),mode:state.mode,top:state.rows.slice(0,15)}));
   }catch(e){ setStatus('Feed issue','error'); $('scanMessage').className='scan-message error'; $('scanMessage').innerHTML=`${escapeHtml(e.message||String(e))} <b>Try Demo</b> to test the app interface.`; }
   finally{state.scanning=false;document.body.classList.remove('loading')}
 }
 function runDemo(){
-  state.isDemo=true; const rows=scoreRows(demoRows()); state.rows=rows; $('coverage').textContent='DEMO'; $('coverageSub').textContent='Sample opportunities'; $('lastScan').textContent='sample data'; setStatus('Demo mode','demo'); $('scanMessage').className='scan-message'; $('scanMessage').textContent='Demo mode: these numbers are sample data for testing the interface — not live Albion prices.'; render();
+  state.isDemo=true; const rows=scoreRows(demoRows()); state.rows=rows; state.doubtful=[]; $('coverage').textContent='DEMO'; $('coverageSub').textContent='Sample opportunities'; $('lastScan').textContent='sample data'; setStatus('Demo mode','demo'); $('scanMessage').className='scan-message'; $('scanMessage').textContent='Demo mode: these numbers are sample data for testing the interface — not live Albion prices.'; render();
 }
 function exportCsv(){
   if(!state.rows.length)return; const cols=['score','id','name','kind','from','to','buy','sell','fees','profit','roi','volume','age','detail'];
@@ -333,7 +379,7 @@ function showInstall(){ if(isStandalone()){alert('Albion Radar is already runnin
 const TRADE_KEY='albionProfitRadarTrades';
 function loadTrades(){try{const t=JSON.parse(localStorage.getItem(TRADE_KEY)||'[]');return Array.isArray(t)?t:[]}catch{return[]}}
 function saveTrades(){try{localStorage.setItem(TRADE_KEY,JSON.stringify(state.trades))}catch{}}
-state.trades=loadTrades(); state.plan=null; state.doneTrade=null; state.filtered=[];
+state.trades=loadTrades(); state.plan=null; state.doneTrade=null; state.filtered=[]; state.doubtful=[]; state.doubtTab='ok';
 
 function openSheet(name){$(name+'Backdrop').hidden=false;requestAnimationFrame(()=>$(name+'Sheet').classList.add('open'))}
 function closeSheet(name){$(name+'Sheet').classList.remove('open');setTimeout(()=>$(name+'Backdrop').hidden=true,220)}
@@ -566,6 +612,7 @@ $('clearLogBtn').addEventListener('click',()=>{if(confirm('Delete all logged tra
 buildCities();updateLabels();setMode('flip');renderLog();loadRecipes().then(()=>{ if(new URLSearchParams(location.search).get('demo')==='1') runDemo(); else restoreCached(); });
 setInterval(()=>{if($('autoScan').checked&&!document.hidden&&!state.isDemo)scan()},30*60*1000);
 $('modeTabs').addEventListener('click',e=>{const b=e.target.closest('button[data-mode]');if(b){setMode(b.dataset.mode); if(state.isDemo)runDemo();}});
+$('doubtTabs').addEventListener('click',e=>{const b=e.target.closest('button[data-dtab]');if(b){state.doubtTab=b.dataset.dtab;render();}});
 $('premium').addEventListener('change',syncTax);$('useFocus').addEventListener('change',syncFocus);
 ['minProfit','minRoi','riskBuffer','returnRate','stationFee'].forEach(id=>$(id).addEventListener('input',updateLabels));
 $('refreshBtn').addEventListener('click',scan);$('navScan').addEventListener('click',scan);$('demoBtn').addEventListener('click',runDemo);$('resetBtn').addEventListener('click',reset);$('searchResults').addEventListener('input',render);$('exportBtn').addEventListener('click',exportCsv);
