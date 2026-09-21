@@ -81,10 +81,19 @@
         <div id="mobileResults" class="mobile-results"></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Score</th><th>Item</th><th>Plan</th><th>Buy / Mats</th><th>Sell</th><th>Fees</th><th>Net</th><th>ROI</th><th>Volume</th><th>Freshness</th></tr></thead>
+            <thead><tr><th>Score</th><th>Item</th><th>Plan</th><th>Buy / Mats</th><th>Sell</th><th>Fees</th><th>Net</th><th>ROI</th><th>Volume</th><th>Freshness</th><th></th></tr></thead>
             <tbody id="resultsBody"></tbody>
           </table>
         </div>
+      </section>
+
+      <section id="logSection" class="panel">
+        <div class="section-title">
+          <div><span class="kicker">TRADE LOG</span><h3>My trades</h3></div>
+          <button id="clearLogBtn" class="text-btn">Clear</button>
+        </div>
+        <div id="logSummary" class="log-summary"></div>
+        <div id="tradeList" class="trade-list"></div>
       </section>
 
       <section class="panel model-panel">
@@ -160,10 +169,38 @@
     <nav class="bottom-nav" aria-label="App navigation">
       <button id="navTop" class="nav-btn active"><span>⌂</span><small>Top</small></button>
       <button id="navResults" class="nav-btn"><span>≡</span><small>Results</small></button>
+      <button id="navLog" class="nav-btn"><span>▤</span><small>Log</small></button>
       <button id="navFilters" class="nav-btn"><span>⚙</span><small>Filters</small></button>
       <button id="navScan" class="nav-scan" aria-label="Scan now">⌁</button>
     </nav>
   </div>
+
+  <div id="planBackdrop" class="sheet-backdrop" hidden></div>
+  <aside id="planSheet" class="filter-sheet" aria-label="Trade plan">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <div><span class="kicker">TRADE PLAN</span><h3 id="planTitle">Trade plan</h3><div class="trade-route" id="planMeta"></div></div>
+      <div class="sheet-actions"><button id="planClose" class="icon-btn" aria-label="Close plan">×</button></div>
+    </div>
+    <div class="filter-scroll" id="planBody"></div>
+    <div class="sheet-footer"><button id="startTradeBtn" class="primary">Start trade &amp; log it</button></div>
+  </aside>
+
+  <div id="doneBackdrop" class="sheet-backdrop" hidden></div>
+  <aside id="doneSheet" class="filter-sheet done-sheet" aria-label="Complete trade">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <div><span class="kicker">TRADE RESULT</span><h3 id="doneTitle">Complete trade</h3></div>
+      <div class="sheet-actions"><button id="doneClose" class="icon-btn" aria-label="Close">×</button></div>
+    </div>
+    <div class="filter-scroll">
+      <p class="step-sub" style="margin-top:2px">Enter what actually happened. The app records your real silver profit / loss.</p>
+      <div class="done-field"><span>Silver spent (total)</span><input id="doneCost" type="number" inputmode="decimal" min="0"></div>
+      <div class="done-field"><span>Silver received (total)</span><input id="doneRevenue" type="number" inputmode="decimal" min="0"></div>
+      <div class="done-preview" id="donePreview"></div>
+    </div>
+    <div class="sheet-footer"><button id="saveDoneBtn" class="primary">Save result</button></div>
+  </aside>
 
   <div id="installSheet" class="install-guide" hidden>
     <div class="install-card" role="dialog" aria-modal="true" aria-labelledby="installTitle">

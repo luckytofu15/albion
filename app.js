@@ -160,7 +160,7 @@ function flipRows(ids,prices,cities){
         if(to===from)continue; const dst=exitQuote(map.get(`${id}|${to}`),to); if(!dst||dst.age>maxAge)continue;
         const acquisition=src.price, buySetup=$('buyOrders').checked?acquisition*(+$('setupFee').value/100):0, sellFees=feesForSale(dst.price,dst.order), risk=riskCost(acquisition);
         const profit=dst.price-acquisition-buySetup-sellFees-risk, roi=acquisition>0?profit/(acquisition+buySetup+risk)*100:0;
-        out.push({id,name,kind:'flip',from,to,buy:acquisition,sell:dst.price,fees:buySetup+sellFees+risk,profit,roi,age:Math.max(src.age,dst.age),volume:null,score:0,detail:`${$('buyOrders').checked?'Buy order':'Instant buy'} → ${dst.order?'Sell order':'Instant sell'}`});
+        out.push({id,name,kind:'flip',from,to,buy:acquisition,sell:dst.price,fees:buySetup+sellFees+risk,profit,roi,age:Math.max(src.age,dst.age),volume:null,score:0,entryOrder:$('buyOrders').checked,exitOrder:dst.order,detail:`${$('buyOrders').checked?'Buy order':'Instant buy'} → ${dst.order?'Sell order':'Instant sell'}`});
       }
     }
   }
@@ -178,7 +178,7 @@ function craftRows(ids,prices,cities){
   for(const id of ids){
     const recipe=state.recipes[id]; if(!recipe||!(recipe.materials||[]).length)continue;
     const craftCity=recipe.city&&cities.includes(recipe.city)?recipe.city:cities.find(c=>c!=='Black Market'); if(!craftCity)continue;
-    let matCost=0,maxMatAge=0,sourceNames=[],valid=true;
+    let matCost=0,maxMatAge=0,sourceNames=[],valid=true; const mats=[];
     for(const mat of recipe.materials){
       let src;
       if($('globalSource').checked) src=cheapestMaterial(mat,map,cities,maxAge);
@@ -186,13 +186,14 @@ function craftRows(ids,prices,cities){
       if(!src||src.age>maxAge){valid=false;break}
       const effectiveCount=mat.count*(mat.returnable===false?1:(1-rrr)), base=src.price*effectiveCount;
       matCost+=base+($('buyOrders').checked?base*(+$('setupFee').value/100):0); maxMatAge=Math.max(maxMatAge,src.age); sourceNames.push(src.city);
+      mats.push({id:mat.id,name:state.recipes[mat.id]?.name||mat.id,count:mat.count,eff:effectiveCount,price:src.price,city:src.city,fee:$('buyOrders').checked?base*(+$('setupFee').value/100):0});
     }
     if(!valid)continue;
-    const amount=recipe.amountCrafted||1, station=((recipe.itemValue||0)*0.1125*stationRate)+(recipe.silverCost||0), totalCost=(matCost+station)/amount;
+    const amount=recipe.amountCrafted||1, station=((recipe.itemValue||0)*0.1125*stationRate)+(recipe.silverCost||0), totalCost=(matCost+station)/amount, stationUnit=station/amount, journalUnit=journal/amount;
     for(const to of cities){
       const dst=exitQuote(map.get(`${id}|${to}`),to); if(!dst||dst.age>maxAge)continue;
       const sellFees=feesForSale(dst.price,dst.order),risk=riskCost(totalCost),profit=dst.price-sellFees-totalCost-risk+journal,roi=totalCost>0?profit/(totalCost+risk)*100:0,unique=[...new Set(sourceNames)];
-      out.push({id,name:recipe.name||id,kind:recipe.kind||state.mode,from:craftCity,to,buy:totalCost,sell:dst.price,fees:sellFees+station+risk,profit,roi,age:Math.max(maxMatAge,dst.age),volume:null,score:0,detail:`${unique.length>1?'Global mats':unique[0]||craftCity} → ${craftCity} ${state.mode} → ${to}`});
+      out.push({id,name:recipe.name||id,kind:recipe.kind||state.mode,from:craftCity,to,buy:totalCost,sell:dst.price,fees:sellFees+station+risk,profit,roi,age:Math.max(maxMatAge,dst.age),volume:null,score:0,mats,stationUnit,journalUnit,entryOrder:$('buyOrders').checked,exitOrder:dst.order,detail:`${unique.length>1?'Global mats':unique[0]||craftCity} → ${craftCity} ${state.mode} → ${to}`});
     }
   } return out;
 }
@@ -215,20 +216,26 @@ function demoRows(){
   const now=.35;
   const sets={
     flip:[
-      {id:'T6_BAG',name:"Master's Bag",from:'Martlock',to:'Black Market',buy:28600,sell:39200,fees:3584,profit:7016,roi:24.0,age:now,volume:44,detail:'Demo: instant buy → Black Market'},
-      {id:'T5_MAIN_AXE',name:"Expert's Battleaxe",from:'Thetford',to:'Caerleon',buy:17800,sell:24850,fees:2065,profit:4985,roi:27.4,age:1.4,volume:31,detail:'Demo: city flip'},
-      {id:'T4_BAG',name:"Adept's Bag",from:'Bridgewatch',to:'Lymhurst',buy:6400,sell:8840,fees:768,profit:1672,roi:25.6,age:2.1,volume:126,detail:'Demo: fast-volume flip'},
-      {id:'T7_LEATHER',name:"Grandmaster's Leather",from:'Martlock',to:'Caerleon',buy:7350,sell:9720,fees:861,profit:1509,roi:20.1,age:3.2,volume:212,detail:'Demo: refined resource spread'}
+      {id:'T6_BAG',name:"Master's Bag",from:'Martlock',to:'Black Market',buy:28600,sell:39200,fees:3120,profit:7480,roi:25.6,age:now,volume:44,entryOrder:false,exitOrder:true,detail:'Demo: instant buy → Black Market'},
+      {id:'T5_MAIN_AXE',name:"Expert's Battleaxe",from:'Thetford',to:'Caerleon',buy:17800,sell:24850,fees:1971,profit:5079,roi:28.0,age:1.4,volume:31,entryOrder:false,exitOrder:true,detail:'Demo: city flip'},
+      {id:'T4_BAG',name:"Adept's Bag",from:'Bridgewatch',to:'Lymhurst',buy:6400,sell:8840,fees:703,profit:1737,roi:26.6,age:2.1,volume:126,entryOrder:false,exitOrder:true,detail:'Demo: fast-volume flip'},
+      {id:'T7_LEATHER',name:"Grandmaster's Leather",from:'Martlock',to:'Caerleon',buy:7350,sell:9720,fees:779,profit:1591,roi:21.2,age:3.2,volume:212,entryOrder:false,exitOrder:true,detail:'Demo: refined resource spread'}
     ],
     craft:[
-      {id:'T6_BAG',name:"Master's Bag",from:'Bridgewatch',to:'Black Market',buy:31500,sell:47200,fees:4770,profit:10930,roi:33.9,age:.8,volume:38,detail:'Demo: global mats → craft → Black Market'},
-      {id:'T5_MAIN_AXE',name:"Expert's Battleaxe",from:'Thetford',to:'Caerleon',buy:19200,sell:28600,fees:2700,profit:6700,roi:34.1,age:1.6,volume:27,detail:'Demo: Thetford craft → Caerleon'},
-      {id:'T4_BAG',name:"Adept's Bag",from:'Bridgewatch',to:'Bridgewatch',buy:6550,sell:9050,fees:804,profit:1696,roi:25.4,age:2.6,volume:109,detail:'Demo: local craft & sell'}
+      {id:'T6_BAG',name:"Master's Bag",from:'Bridgewatch',to:'Black Market',buy:31500,sell:47200,fees:3698,profit:12002,roi:37.4,age:.8,volume:38,entryOrder:false,exitOrder:true,stationUnit:8639,journalUnit:0,
+       mats:[{id:'T6_LEATHER',name:"Master's Leather",count:8,eff:6.0160526,price:2400,city:'Martlock',fee:0},{id:'T6_CLOTH',name:"Master's Cloth",count:8,eff:6.0160526,price:1400,city:'Lymhurst',fee:0}],detail:'Demo: global mats → craft → Black Market'},
+      {id:'T5_MAIN_AXE',name:"Expert's Battleaxe",from:'Thetford',to:'Caerleon',buy:19200,sell:28600,fees:2243,profit:7157,roi:36.5,age:1.6,volume:27,entryOrder:false,exitOrder:true,stationUnit:5120,journalUnit:0,
+       mats:[{id:'T5_METALBAR',name:"Expert's Metal Bar",count:16,eff:12.0341888,price:930,city:'Thetford',fee:0},{id:'T5_PLANKS',name:"Expert's Planks",count:8,eff:6.0170944,price:480,city:'Fort Sterling',fee:0}],detail:'Demo: Thetford craft → Caerleon'},
+      {id:'T4_BAG',name:"Adept's Bag",from:'Bridgewatch',to:'Bridgewatch',buy:6550,sell:9050,fees:719,profit:1781,roi:26.7,age:2.6,volume:109,entryOrder:false,exitOrder:true,stationUnit:1810,journalUnit:0,
+       mats:[{id:'T4_LEATHER',name:"Adept's Leather",count:8,eff:6.0382168,price:420,city:'Martlock',fee:0},{id:'T4_CLOTH',name:"Adept's Cloth",count:8,eff:6.0382168,price:365,city:'Lymhurst',fee:0}],detail:'Demo: local craft & sell'}
     ],
     refine:[
-      {id:'T6_LEATHER',name:"Master's Leather",from:'Martlock',to:'Caerleon',buy:4200,sell:6280,fees:596,profit:1484,roi:34.6,age:.6,volume:318,detail:'Demo: Martlock refine → Caerleon'},
-      {id:'T5_METALBAR',name:"Expert's Metal Bar",from:'Thetford',to:'Bridgewatch',buy:2050,sell:2940,fees:282,profit:608,roi:29.1,age:1.1,volume:512,detail:'Demo: Thetford refine → Bridgewatch'},
-      {id:'T4_CLOTH',name:"Adept's Cloth",from:'Lymhurst',to:'Caerleon',buy:720,sell:1010,fees:99,profit:191,roi:25.9,age:2.4,volume:880,detail:'Demo: Lymhurst refine → Caerleon'}
+      {id:'T6_LEATHER',name:"Master's Leather",from:'Martlock',to:'Caerleon',buy:4200,sell:6280,fees:492,profit:1588,roi:37.1,age:.6,volume:318,entryOrder:false,exitOrder:true,stationUnit:128,journalUnit:0,
+       mats:[{id:'T6_HIDE',name:"Master's Hide",count:2,eff:1.5039646,price:2010,city:'Martlock',fee:0},{id:'T5_LEATHER',name:"Expert's Leather",count:1,eff:0.7519823,price:1395,city:'Martlock',fee:0}],detail:'Demo: Martlock refine → Caerleon'},
+      {id:'T5_METALBAR',name:"Expert's Metal Bar",from:'Thetford',to:'Bridgewatch',buy:2050,sell:2940,fees:232,profit:658,roi:31.5,age:1.1,volume:512,entryOrder:false,exitOrder:true,stationUnit:253,journalUnit:0,
+       mats:[{id:'T5_ORE',name:"Expert's Ore",count:3,eff:2.2556493,price:600,city:'Thetford',fee:0},{id:'T4_METALBAR',name:"Adept's Metal Bar",count:1,eff:0.7518831,price:590,city:'Thetford',fee:0}],detail:'Demo: Thetford refine → Bridgewatch'},
+      {id:'T4_CLOTH',name:"Adept's Cloth",from:'Lymhurst',to:'Caerleon',buy:720,sell:1010,fees:80,profit:210,roi:28.6,age:2.4,volume:880,entryOrder:false,exitOrder:true,stationUnit:92,journalUnit:0,
+       mats:[{id:'T4_FIBER',name:"Adept's Fiber",count:2,eff:1.5041916,price:290,city:'Lymhurst',fee:0},{id:'T3_CLOTH',name:"Journeyman's Cloth",count:1,eff:0.7520958,price:255,city:'Lymhurst',fee:0}],detail:'Demo: Lymhurst refine → Caerleon'}
     ]
   };
   return sets[state.mode].map(x=>({...x,kind:state.mode,score:0}));
@@ -236,8 +243,9 @@ function demoRows(){
 
 function render(){
   const q=$('searchResults').value.trim().toLowerCase(), rows=state.rows.filter(r=>!q||`${r.name} ${r.id} ${r.from} ${r.to}`.toLowerCase().includes(q));
-  $('resultsBody').innerHTML=rows.map(r=>`<tr><td><span class="score-pill">${r.score}</span></td><td><strong>${escapeHtml(r.name)}</strong><br><span class="tag">${escapeHtml(r.id)}</span></td><td><strong>${escapeHtml(r.from)}</strong> → <strong>${escapeHtml(r.to)}</strong><br><span class="tag">${escapeHtml(r.detail)}</span></td><td>${money(r.buy)}</td><td>${money(r.sell)}</td><td>${money(r.fees)}</td><td class="${r.profit>=0?'money-pos':'money-neg'}">${money(r.profit)}</td><td>${pct(r.roi)}</td><td>${r.volume==null?'—':fmt.format(Math.round(r.volume))}/d</td><td class="${r.age<=12?'fresh':'stale'}">${humanAge(r.age)}</td></tr>`).join('');
-  $('mobileResults').innerHTML=rows.map(r=>`<article class="result-card"><div class="result-top"><div class="score-box">${r.score}</div><div class="result-title"><strong>${escapeHtml(r.name)}</strong><span>${escapeHtml(r.from)} → ${escapeHtml(r.to)} · ${escapeHtml(r.detail)}</span></div><div class="profit-box"><strong>+${money(Math.max(0,r.profit))}</strong><span>${pct(r.roi)} ROI</span></div></div><div class="result-metrics"><div><b>${money(r.buy)}</b><span>Cost</span></div><div><b>${money(r.sell)}</b><span>Sell</span></div><div><b>${r.volume==null?'—':fmt.format(Math.round(r.volume))}</b><span>Vol/day</span></div><div><b>${humanAge(r.age)}</b><span>Age</span></div></div></article>`).join('');
+  state.filtered=rows;
+  $('resultsBody').innerHTML=rows.map((r,i)=>`<tr><td><span class="score-pill">${r.score}</span></td><td><strong>${escapeHtml(r.name)}</strong><br><span class="tag">${escapeHtml(r.id)}</span></td><td><strong>${escapeHtml(r.from)}</strong> → <strong>${escapeHtml(r.to)}</strong><br><span class="tag">${escapeHtml(r.detail)}</span></td><td>${money(r.buy)}</td><td>${money(r.sell)}</td><td>${money(r.fees)}</td><td class="${r.profit>=0?'money-pos':'money-neg'}">${money(r.profit)}</td><td>${pct(r.roi)}</td><td>${r.volume==null?'—':fmt.format(Math.round(r.volume))}/d</td><td class="${r.age<=12?'fresh':'stale'}">${humanAge(r.age)}</td><td><button class="plan-btn" data-plan="${i}">Plan →</button></td></tr>`).join('');
+  $('mobileResults').innerHTML=rows.map((r,i)=>`<article class="result-card"><div class="result-top"><div class="score-box">${r.score}</div><div class="result-title"><strong>${escapeHtml(r.name)}</strong><span>${escapeHtml(r.from)} → ${escapeHtml(r.to)} · ${escapeHtml(r.detail)}</span></div><div class="profit-box"><strong>+${money(Math.max(0,r.profit))}</strong><span>${pct(r.roi)} ROI</span></div></div><div class="result-metrics"><div><b>${money(r.buy)}</b><span>Cost</span></div><div><b>${money(r.sell)}</b><span>Sell</span></div><div><b>${r.volume==null?'—':fmt.format(Math.round(r.volume))}</b><span>Vol/day</span></div><div><b>${humanAge(r.age)}</b><span>Age</span></div></div><button class="plan-btn plan-card-btn" data-plan="${i}">Plan this trade →</button></article>`).join('');
 
   const top=state.rows.slice(0,3);
   $('dailyCards').innerHTML=top.length?top.map((r,i)=>`<article class="daily-card"><span class="rank">#${i+1} · SCORE ${r.score}${state.isDemo?' · DEMO':''}</span><h4>${escapeHtml(r.name)}</h4><div class="route">${escapeHtml(r.from)} → ${escapeHtml(r.to)}</div><div class="daily-metrics"><div><strong>${money(r.profit)}</strong><span>NET SILVER</span></div><div><strong>${pct(r.roi)}</strong><span>ROI</span></div><div><strong>${r.volume==null?'—':fmt.format(Math.round(r.volume))}</strong><span>VOL/DAY</span></div></div></article>`).join(''):'<div class="empty-state"><strong>No opportunities pass your filters</strong><span>Lower minimum profit/ROI or broaden the markets.</span></div>';
@@ -282,7 +290,187 @@ function scrollToId(id){ document.getElementById(id)?.scrollIntoView({behavior:'
 function isStandalone(){return window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true}
 function showInstall(){ if(isStandalone()){alert('Albion Radar is already running as a Home Screen app.');return} $('installSheet').hidden=false; }
 
-buildCities();updateLabels();setMode('flip');loadRecipes().then(()=>{ if(new URLSearchParams(location.search).get('demo')==='1') runDemo(); else restoreCached(); });
+/* ================= TRADE PLANS & LOG ================= */
+const TRADE_KEY='albionProfitRadarTrades';
+function loadTrades(){try{const t=JSON.parse(localStorage.getItem(TRADE_KEY)||'[]');return Array.isArray(t)?t:[]}catch{return[]}}
+function saveTrades(){try{localStorage.setItem(TRADE_KEY,JSON.stringify(state.trades))}catch{}}
+state.trades=loadTrades(); state.plan=null; state.doneTrade=null; state.filtered=[];
+
+function openSheet(name){$(name+'Backdrop').hidden=false;requestAnimationFrame(()=>$(name+'Sheet').classList.add('open'))}
+function closeSheet(name){$(name+'Sheet').classList.remove('open');setTimeout(()=>$(name+'Backdrop').hidden=true,220)}
+
+/* Per-unit math that recomputes honestly when the user overrides prices. */
+function planMath(){
+  const p=state.plan,r=p.row,setup=+$('setupFee').value/100;
+  if(r.kind==='flip'){
+    const buySetup=r.entryOrder?p.buy*setup:0, sellFees=feesForSale(p.sell,r.exitOrder), risk=riskCost(p.buy);
+    const net=p.sell-p.buy-buySetup-sellFees-risk, base=p.buy+buySetup+risk;
+    return {cost:p.buy,fees:buySetup+sellFees+risk,net,roi:base>0?net/base*100:0,matCost:p.buy,station:0};
+  }
+  const matCost=p.mats.reduce((s,m)=>s+m.eff*m.price+(m.fee||0),0), station=r.stationUnit||0, journal=r.journalUnit||0;
+  const buy=matCost+station, sellFees=feesForSale(p.sell,r.exitOrder), risk=riskCost(buy);
+  const net=p.sell-sellFees-buy-risk+journal;
+  return {cost:buy,fees:sellFees+risk,net,roi:(buy+risk)>0?net/(buy+risk)*100:0,matCost,station};
+}
+function matGroups(){
+  const g=new Map();
+  for(const m of state.plan.mats){if(!g.has(m.city))g.set(m.city,[]);g.get(m.city).push(m)}
+  return [...g.entries()];
+}
+function openPlan(r){
+  state.plan={row:r,qty:1,sell:Math.round(r.sell),buy:Math.round(r.buy),mats:(r.mats||[]).map(m=>({...m,price:Math.round(m.price)}))};
+  renderPlan(); openSheet('plan');
+}
+function planSummaryHtml(m){
+  const q=state.plan.qty, in_=Math.round(m.cost*q), fees=Math.round(m.fees*q), out=Math.round(state.plan.sell*q), net=Math.round(m.net*q);
+  return `<div class="ps-row"><span>Silver in (total cost)</span><b>−${money(in_)}</b></div>
+  <div class="ps-row"><span>Fees & tax</span><b>−${money(fees)}</b></div>
+  <div class="ps-row"><span>Silver out (total sell)</span><b>+${money(out)}</b></div>
+  <div class="ps-row ps-net"><span>Net profit</span><b class="${net>=0?'money-pos':'money-neg'}">${net>=0?'+':''}${money(net)} silver</b></div>
+  <div class="ps-row"><span>Return on investment</span><b class="${m.roi>=0?'money-pos':'money-neg'}">${pct(m.roi)}</b></div>`;
+}
+function renderPlan(){
+  const p=state.plan; if(!p)return; const r=p.row,m=planMath();
+  $('planTitle').textContent=`${r.name} ×${p.qty}`;
+  $('planMeta').textContent=`${r.from} → ${r.to} · ${r.kind.toUpperCase()}`;
+  let steps='';
+  if(r.kind==='flip'){
+    steps+=`<div class="plan-step"><span class="step-num">1</span><div class="step-body"><b>Go to ${escapeHtml(r.from)} market — ${r.entryOrder?'place a buy order':'buy now'}:</b>
+      <div class="price-line"><span>${p.qty}× ${escapeHtml(r.name)} @</span><input type="number" id="planBuy" inputmode="decimal" min="0" value="${p.buy}"><span class="silver-tag">silver</span></div>
+      <div class="step-sub">Total buy: <b id="planBuyTotal">${money(p.buy*p.qty)} silver</b></div></div></div>
+    <div class="plan-step"><span class="step-num">2</span><div class="step-body"><b>Fast-travel to ${escapeHtml(r.to)}.</b><div class="step-sub">Carry the items. Transport risk is already priced into the profit below.</div></div></div>`;
+  }else{
+    const groups=matGroups();
+    steps+=`<div class="plan-step"><span class="step-num">1</span><div class="step-body"><b>Go to the market and ${r.entryOrder?'place buy orders':'buy'}:</b>`;
+    for(const [city,ms] of groups){
+      steps+=`<div class="mat-city">AT ${escapeHtml(city.toUpperCase())} MARKET${city==='Vendor'?' (VENDOR)':''}</div>`;
+      for(const mt of ms) steps+=`<div class="price-line mat"><span>${mt.count*p.qty}× ${escapeHtml(mt.name)} @</span><input type="number" inputmode="decimal" min="0" data-mat="${escapeHtml(mt.id)}" value="${mt.price}"><span class="silver-tag">silver</span><span class="mat-total" data-mat-total="${escapeHtml(mt.id)}">= ${money(mt.eff*mt.price*p.qty)}</span></div>`;
+    }
+    steps+=`<div class="step-sub">Materials total: <b id="planMatTotal">${money(m.matCost*p.qty)} silver</b></div></div></div>`;
+    const needMove=groups.some(([c])=>c!==r.from);
+    steps+=`<div class="plan-step"><span class="step-num">2</span><div class="step-body"><b>${needMove?`Bring all materials to ${escapeHtml(r.from)}.`:`Materials are already in ${escapeHtml(r.from)} — no travel needed.`}</b></div></div>`;
+    steps+=`<div class="plan-step"><span class="step-num">3</span><div class="step-body"><b>Craft ${p.qty}× ${escapeHtml(r.name)} at ${escapeHtml(r.from)}.</b><div class="step-sub">Station cost ≈ <b>${money((r.stationUnit||0)*p.qty)} silver</b></div></div></div>`;
+  }
+  const sellStep=r.kind==='flip'?3:4;
+  steps+=`<div class="plan-step"><span class="step-num">${sellStep}</span><div class="step-body"><b>Go to ${escapeHtml(r.to)} market — ${r.exitOrder?'set a sell order':'sell instantly'}:</b>
+    <div class="price-line"><span>${p.qty}× @</span><input type="number" id="planSell" inputmode="decimal" min="0" value="${p.sell}"><span class="silver-tag">silver</span></div>
+    <div class="step-sub">Total sell: <b id="planSellTotal">${money(p.sell*p.qty)} silver</b></div></div></div>`;
+  $('planBody').innerHTML=`
+    <div class="plan-qty-row"><label>Quantity <input type="number" id="planQty" inputmode="numeric" min="1" max="9999" value="${p.qty}"></label><span class="plan-live-hint">Edit any price — numbers update live.</span></div>
+    <div class="plan-steps">${steps}</div>
+    <div class="plan-summary" id="planSummary">${planSummaryHtml(m)}</div>`;
+  bindPlanInputs();
+}
+function updatePlanNumbers(){
+  const p=state.plan; if(!p)return; const m=planMath(),q=p.qty;
+  const set=(id,txt)=>{const el=$(id);if(el)el.textContent=txt};
+  set('planBuyTotal',`${money(p.buy*q)} silver`);
+  set('planSellTotal',`${money(p.sell*q)} silver`);
+  set('planMatTotal',`${money(m.matCost*q)} silver`);
+  document.querySelectorAll('#planBody [data-mat-total]').forEach(el=>{const mt=p.mats.find(x=>x.id===el.dataset.matTotal);if(mt)el.textContent=`= ${money(mt.eff*mt.price*q)}`});
+  $('planSummary').innerHTML=planSummaryHtml(m);
+}
+function bindPlanInputs(){
+  $('planQty').addEventListener('change',e=>{state.plan.qty=Math.max(1,Math.round(+e.target.value||1));renderPlan()});
+  const b=$('planBuy'); if(b)b.addEventListener('input',e=>{state.plan.buy=Math.max(0,+e.target.value||0);updatePlanNumbers()});
+  $('planSell').addEventListener('input',e=>{state.plan.sell=Math.max(0,+e.target.value||0);updatePlanNumbers()});
+  document.querySelectorAll('#planBody [data-mat]').forEach(inp=>inp.addEventListener('input',e=>{
+    const mt=state.plan.mats.find(x=>x.id===inp.dataset.mat); if(mt)mt.price=Math.max(0,+e.target.value||0); updatePlanNumbers();
+  }));
+}
+function planStepTexts(){
+  const p=state.plan,r=p.row,m=planMath(),q=p.qty;
+  if(r.kind==='flip')return[
+    `At ${r.from} market — ${r.entryOrder?'place buy order':'buy'}: ${q}× ${r.name} @ ${money(p.buy)} = ${money(p.buy*q)} silver`,
+    `Fast-travel to ${r.to}`,
+    `At ${r.to} market — ${r.exitOrder?'place sell order':'instant sell'}: ${q}× @ ${money(p.sell)} = ${money(p.sell*q)} silver`
+  ];
+  const groups=matGroups();
+  return[
+    groups.map(([city,ms])=>`At ${city} market — ${r.entryOrder?'place buy order':'buy'}: ${ms.map(mt=>`${mt.count*q}× ${mt.name} @ ${money(mt.price)}`).join(', ')}`).join('  •  '),
+    groups.some(([c])=>c!==r.from)?`Carry all materials to ${r.from}`:`Materials already in ${r.from}`,
+    `Craft ${q}× ${r.name} at ${r.from} (station ≈ ${money((r.stationUnit||0)*q)} silver)`,
+    `At ${r.to} market — ${r.exitOrder?'place sell order':'instant sell'}: ${q}× @ ${money(p.sell)} = ${money(p.sell*q)} silver`
+  ];
+}
+function startTrade(){
+  const p=state.plan; if(!p)return; const r=p.row,m=planMath(),q=p.qty;
+  state.trades.unshift({id:'t'+Date.now(),at:Date.now(),name:r.name,itemId:r.id,kind:r.kind,from:r.from,to:r.to,qty:q,
+    plan:{cost:Math.round(m.cost*q),fees:Math.round(m.fees*q),revenue:Math.round(p.sell*q),net:Math.round(m.net*q),roi:m.roi},
+    steps:planStepTexts(),checked:[],status:'open',actual:null});
+  saveTrades(); closeSheet('plan'); renderLog(); scrollToId('logSection');
+}
+/* ---- Trade log ---- */
+function tradeCard(t){
+  const d=new Date(t.at).toLocaleDateString([],{month:'short',day:'numeric'});
+  const badge=t.status==='open'?'<span class="trade-badge open">IN PROGRESS</span>':'<span class="trade-badge done">LOGGED</span>';
+  const planLine=`<div class="trade-nums"><div><span>Planned in</span><b>−${money(t.plan.cost)}</b></div><div><span>Planned out</span><b>+${money(t.plan.revenue)}</b></div><div><span>Planned net</span><b class="${t.plan.net>=0?'money-pos':'money-neg'}">${t.plan.net>=0?'+':''}${money(t.plan.net)}</b></div><div><span>Planned ROI</span><b>${pct(t.plan.roi)}</b></div></div>`;
+  let extra='';
+  if(t.status==='open'){
+    extra=`<div class="trade-steps">${t.steps.map((s,i)=>`<label class="trade-step"><input type="checkbox" data-trade-check="${t.id}" data-step="${i}" ${t.checked.includes(i)?'checked':''}><span>${escapeHtml(s)}</span></label>`).join('')}</div>
+    <div class="trade-actions"><button class="secondary small" data-trade-act="complete" data-trade="${t.id}">Complete & log result</button><button class="text-btn" data-trade-act="delete" data-trade="${t.id}">Delete</button></div>`;
+  }else{
+    const a=t.actual;
+    extra=`<div class="trade-actual ${a.net>=0?'win':'loss'}"><div class="trade-nums"><div><span>Actually spent</span><b>−${money(a.cost)}</b></div><div><span>Actually received</span><b>+${money(a.revenue)}</b></div><div><span>Real P/L</span><b class="${a.net>=0?'money-pos':'money-neg'}">${a.net>=0?'+':''}${money(a.net)}</b></div><div><span>Real ROI</span><b>${pct(a.roi)}</b></div></div><span class="trade-badge ${a.net>=0?'win':'loss'}">${a.net>=0?'WIN':'LOSS'}</span></div>`;
+  }
+  return `<article class="trade-card"><div class="trade-head"><div><strong>${escapeHtml(t.name)} ×${t.qty}</strong><div class="trade-route">${escapeHtml(t.from)} → ${escapeHtml(t.to)} · ${escapeHtml(t.kind)} · ${d}</div></div>${badge}</div>${planLine}${extra}</article>`;
+}
+function renderLog(){
+  const done=state.trades.filter(t=>t.status==='done');
+  const net=done.reduce((s,t)=>s+t.actual.net,0), wins=done.filter(t=>t.actual.net>=0).length, open=state.trades.length-done.length;
+  $('logSummary').innerHTML=`
+    <div class="log-stat"><span>Logged P/L</span><strong class="${net>=0?'money-pos':'money-neg'}">${net>=0?'+':''}${money(net)}</strong><small>silver · completed</small></div>
+    <div class="log-stat"><span>Win rate</span><strong>${done.length?Math.round(100*wins/done.length):0}%</strong><small>${wins}/${done.length} winning</small></div>
+    <div class="log-stat"><span>Open trades</span><strong>${open}</strong><small>${state.trades.length} total logged</small></div>`;
+  $('tradeList').innerHTML=state.trades.length?state.trades.map(tradeCard).join(''):`<div class="empty-state"><strong>No trades logged yet</strong><span>Tap “Plan →” on any opportunity, then “Start trade”.</span></div>`;
+}
+function openDone(id){
+  const t=state.trades.find(x=>x.id===id); if(!t)return; state.doneTrade=t;
+  $('doneTitle').textContent=`${t.name} ×${t.qty}`;
+  $('doneCost').value=t.plan.cost; $('doneRevenue').value=t.plan.revenue;
+  updateDonePreview(); openSheet('done');
+}
+function updateDonePreview(){
+  const c=Math.max(0,+$('doneCost').value||0), r=Math.max(0,+$('doneRevenue').value||0), net=r-c, roi=c>0?net/c*100:0;
+  $('donePreview').innerHTML=`<div><span>Silver spent</span><b>−${money(c)}</b></div><div><span>Silver received</span><b>+${money(r)}</b></div><div><span>Real P/L</span><b class="${net>=0?'money-pos':'money-neg'}">${net>=0?'+':''}${money(net)} silver</b></div><div><span>Real ROI</span><b>${pct(roi)}</b></div>`;
+}
+function saveDone(){
+  const t=state.doneTrade; if(!t)return;
+  const c=Math.round(Math.max(0,+$('doneCost').value||0)), r=Math.round(Math.max(0,+$('doneRevenue').value||0)), net=r-c;
+  t.actual={cost:c,revenue:r,net,roi:c>0?net/c*100:0}; t.status='done'; t.doneAt=Date.now();
+  saveTrades(); closeSheet('done'); renderLog();
+}
+
+/* ---- Wiring ---- */
+$('resultsSection').addEventListener('click',e=>{
+  const b=e.target.closest('[data-plan]');
+  if(b&&state.filtered){const r=state.filtered[+b.dataset.plan];if(r)openPlan(r)}
+});
+$('logSection').addEventListener('change',e=>{
+  const c=e.target.closest('[data-trade-check]'); if(!c)return;
+  const t=state.trades.find(x=>x.id===c.dataset.tradeCheck); if(!t)return;
+  const i=+c.dataset.step, at=t.checked.indexOf(i);
+  if(at>=0)t.checked.splice(at,1);else t.checked.push(i);
+  saveTrades();
+});
+$('logSection').addEventListener('click',e=>{
+  const a=e.target.closest('[data-trade-act]'); if(!a)return;
+  if(a.dataset.tradeAct==='delete'){state.trades=state.trades.filter(t=>t.id!==a.dataset.trade);saveTrades();renderLog()}
+  if(a.dataset.tradeAct==='complete')openDone(a.dataset.trade);
+});
+$('planClose').addEventListener('click',()=>closeSheet('plan'));
+$('planBackdrop').addEventListener('click',()=>closeSheet('plan'));
+$('startTradeBtn').addEventListener('click',startTrade);
+$('doneClose').addEventListener('click',()=>closeSheet('done'));
+$('doneBackdrop').addEventListener('click',()=>closeSheet('done'));
+$('doneCost').addEventListener('input',updateDonePreview);
+$('doneRevenue').addEventListener('input',updateDonePreview);
+$('saveDoneBtn').addEventListener('click',saveDone);
+$('navLog').addEventListener('click',()=>scrollToId('logSection'));
+$('clearLogBtn').addEventListener('click',()=>{if(confirm('Delete all logged trades?')){state.trades=[];saveTrades();renderLog()}});
+
+/* ================= INIT ================= */
+buildCities();updateLabels();setMode('flip');renderLog();loadRecipes().then(()=>{ if(new URLSearchParams(location.search).get('demo')==='1') runDemo(); else restoreCached(); });
 setInterval(()=>{if($('autoScan').checked&&!document.hidden&&!state.isDemo)scan()},30*60*1000);
 $('modeTabs').addEventListener('click',e=>{const b=e.target.closest('button[data-mode]');if(b){setMode(b.dataset.mode); if(state.isDemo)runDemo();}});
 $('premium').addEventListener('change',syncTax);$('useFocus').addEventListener('change',syncFocus);
