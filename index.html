@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0f0c" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Albion Radar" />
+  <meta name="format-detection" content="telephone=no" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png" />
+  <title>Albion Profit Radar</title>
+  <meta name="description" content="Mobile-first Albion Online market, crafting, refining and flipping profit scanner." />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="brand-row">
+        <div class="brand-mark">A</div>
+        <div class="brand-copy">
+          <h1>Profit Radar</h1>
+          <div class="status-line"><span id="statusDot" class="status-dot"></span><span id="feedStatus">Ready</span><span>·</span><span id="lastScan">Not scanned</span></div>
+        </div>
+        <button id="installBtn" class="icon-btn" aria-label="Install app" title="Install on iPhone">⇧</button>
+      </div>
+
+      <div class="quick-row">
+        <select id="serverSelect" class="server-select" aria-label="Albion server">
+          <option value="west">Americas</option>
+          <option value="europe">Europe</option>
+          <option value="east">Asia</option>
+        </select>
+        <div class="segmented mode-tabs" id="modeTabs" aria-label="Strategy">
+          <button data-mode="flip" class="active">Flip</button>
+          <button data-mode="craft">Craft</button>
+          <button data-mode="refine">Refine</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <section class="hero-card">
+        <div>
+          <span class="eyebrow">TODAY'S EDGE</span>
+          <h2>Find the cleanest silver opportunities.</h2>
+          <p>Net of taxes, setup fees, returns, station cost and your transport-risk allowance.</p>
+        </div>
+        <div class="hero-actions">
+          <button id="refreshBtn" class="primary scan-main"><span>⌁</span> Scan live market</button>
+          <button id="demoBtn" class="secondary">Try demo</button>
+        </div>
+      </section>
+
+      <section class="stats-grid" aria-label="Scan summary">
+        <article class="stat-card"><span>Best profit</span><strong id="bestProfit">—</strong><small id="bestProfitSub">Run a scan</small></article>
+        <article class="stat-card"><span>Best ROI</span><strong id="bestRoi">—</strong><small id="bestRoiSub">After costs</small></article>
+        <article class="stat-card"><span>Fresh picks</span><strong id="freshCount">—</strong><small id="freshSub">Within age limit</small></article>
+        <article class="stat-card"><span>Coverage</span><strong id="coverage">—</strong><small id="coverageSub">Valid quotes</small></article>
+      </section>
+
+      <section id="topSection" class="panel recommendations">
+        <div class="section-title">
+          <div><span class="kicker">TOP PICKS</span><h3>Best opportunities</h3></div>
+          <span class="badge" id="modeBadge">FLIP</span>
+        </div>
+        <div id="dailyCards" class="daily-grid">
+          <div class="empty-state"><strong>No scan yet</strong><span>Tap “Scan live market” or “Try demo”.</span></div>
+        </div>
+      </section>
+
+      <section id="resultsSection" class="panel results-panel">
+        <div class="section-title result-head">
+          <div><span class="kicker">ALL RESULTS</span><h3>Ranked by net edge</h3></div>
+          <button id="exportBtn" class="text-btn">CSV</button>
+        </div>
+        <div class="search-row"><input id="searchResults" type="search" inputmode="search" placeholder="Search item or city…" /></div>
+        <div id="scanMessage" class="scan-message">Your calculation assumptions are available under Filters.</div>
+        <div id="mobileResults" class="mobile-results"></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Score</th><th>Item</th><th>Plan</th><th>Buy / Mats</th><th>Sell</th><th>Fees</th><th>Net</th><th>ROI</th><th>Volume</th><th>Freshness</th></tr></thead>
+            <tbody id="resultsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel model-panel">
+        <details>
+          <summary><span><span class="kicker">HOW IT SCORES</span><b>Profit model</b></span><span class="chevron">⌄</span></summary>
+          <div class="formula-grid">
+            <div><span>Flip</span><p>Sale proceeds − acquisition − order fees − transport/risk buffer.</p></div>
+            <div><span>Craft</span><p>Sale proceeds − return-adjusted materials − station/fixed cost + journal value.</p></div>
+            <div><span>Refine</span><p>Crafting engine restricted to refined-resource recipes.</p></div>
+            <div><span>Confidence</span><p>ROI, absolute profit, quote freshness and estimated market volume.</p></div>
+          </div>
+        </details>
+      </section>
+
+      <footer>Albion market data is community supplied and can be stale. Verify expensive trades in game before committing silver.</footer>
+    </main>
+
+    <div id="filterBackdrop" class="sheet-backdrop" hidden></div>
+    <aside id="filterSheet" class="filter-sheet" aria-label="Scanner filters">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <div><span class="kicker">SCAN SETUP</span><h3>Filters & assumptions</h3></div>
+        <div class="sheet-actions"><button id="resetBtn" class="text-btn">Reset</button><button id="filterClose" class="icon-btn" aria-label="Close filters">×</button></div>
+      </div>
+
+      <div class="filter-scroll">
+        <div class="control-section">
+          <div class="section-head"><span>Markets</span><button id="allCitiesBtn" class="text-btn">Select all</button></div>
+          <div id="cityChecks" class="check-grid"></div>
+        </div>
+
+        <div class="control-section two-col">
+          <label><span>Quality</span><select id="quality"><option value="1">Normal</option><option value="2">Good</option><option value="3">Outstanding</option><option value="4">Excellent</option><option value="5">Masterpiece</option></select></label>
+          <label><span>Max quote age</span><select id="maxAge"><option value="6">6 hours</option><option value="12" selected>12 hours</option><option value="24">24 hours</option><option value="72">3 days</option><option value="99999">Any age</option></select></label>
+        </div>
+
+        <div class="control-section toggle-list">
+          <label class="toggle-row"><span><b>Premium</b><small>Lower sales-tax preset</small></span><input type="checkbox" id="premium" checked></label>
+          <label class="toggle-row"><span><b>Source with buy orders</b><small>Lower entry, may take time</small></span><input type="checkbox" id="buyOrders"></label>
+          <label class="toggle-row"><span><b>Exit with sell orders</b><small>Includes listing setup fee</small></span><input type="checkbox" id="sellOrders" checked></label>
+          <label class="toggle-row"><span><b>Include Black Market</b><small>Use BM as an exit market</small></span><input type="checkbox" id="includeBM" checked></label>
+          <label class="toggle-row mode-craft"><span><b>Cheapest mats across cities</b><small>Allows cross-city sourcing</small></span><input type="checkbox" id="globalSource" checked></label>
+          <label class="toggle-row mode-craft"><span><b>Apply resource return</b><small>Deduct returned materials</small></span><input type="checkbox" id="useReturn" checked></label>
+          <label class="toggle-row mode-craft"><span><b>Use Focus preset</b><small>Raises return-rate preset</small></span><input type="checkbox" id="useFocus"></label>
+          <label class="toggle-row"><span><b>Check 7-day volume</b><small>Improves liquidity score</small></span><input type="checkbox" id="liquidity" checked></label>
+          <label class="toggle-row"><span><b>Auto scan while open</b><small>Refresh every 30 minutes</small></span><input type="checkbox" id="autoScan" checked></label>
+        </div>
+
+        <div class="control-section sliders">
+          <label><span>Minimum profit <b id="minProfitLabel">5k</b></span><input type="range" id="minProfit" min="-10000" max="250000" step="5000" value="5000"></label>
+          <label><span>Minimum ROI <b id="minRoiLabel">5%</b></span><input type="range" id="minRoi" min="-20" max="100" step="1" value="5"></label>
+          <label><span>Transport / risk <b id="riskLabel">2%</b></span><input type="range" id="riskBuffer" min="0" max="25" step="0.5" value="2"></label>
+          <label class="mode-craft"><span>Resource return <b id="rrrLabel">24.8%</b></span><input type="range" id="returnRate" min="0" max="60" step="0.1" value="24.8"></label>
+          <label class="mode-craft"><span>Station usage fee <b id="stationLabel">10%</b></span><input type="range" id="stationFee" min="0" max="100" step="1" value="10"></label>
+        </div>
+
+        <details class="advanced">
+          <summary>Advanced fees & item universe</summary>
+          <div class="two-col padded-top">
+            <label><span>Setup fee %</span><input id="setupFee" type="number" value="2.5" min="0" step="0.1"></label>
+            <label><span>Sales tax %</span><input id="salesTax" type="number" value="4" min="0" step="0.1"></label>
+            <label><span>Journal value / craft</span><input id="journalValue" type="number" value="0" min="0" step="100"></label>
+            <label><span>Min daily volume</span><input id="minVolume" type="number" value="0" min="0" step="1"></label>
+          </div>
+          <label class="field-label" for="itemIds">Item IDs (optional)</label>
+          <textarea id="itemIds" rows="4" placeholder="Leave blank for recipe database, or paste IDs such as T4_BAG,T5_MAIN_AXE@1"></textarea>
+          <div class="hint"><span id="recipeCount">Loading recipes…</span><span>Batch-safe requests</span></div>
+        </details>
+      </div>
+      <div class="sheet-footer"><button id="applyFilters" class="primary">Apply & scan</button></div>
+    </aside>
+
+    <nav class="bottom-nav" aria-label="App navigation">
+      <button id="navTop" class="nav-btn active"><span>⌂</span><small>Top</small></button>
+      <button id="navResults" class="nav-btn"><span>≡</span><small>Results</small></button>
+      <button id="navFilters" class="nav-btn"><span>⚙</span><small>Filters</small></button>
+      <button id="navScan" class="nav-scan" aria-label="Scan now">⌁</button>
+    </nav>
+  </div>
+
+  <div id="installSheet" class="install-guide" hidden>
+    <div class="install-card" role="dialog" aria-modal="true" aria-labelledby="installTitle">
+      <button id="installClose" class="icon-btn close-guide" aria-label="Close">×</button>
+      <div class="install-icon">A</div>
+      <span class="eyebrow">IPHONE HOME SCREEN</span>
+      <h3 id="installTitle">Install Albion Radar</h3>
+      <ol><li>Open this site in <b>Safari</b>.</li><li>Tap the <b>Share</b> button.</li><li>Choose <b>Add to Home Screen</b>.</li><li>Tap <b>Add</b>.</li></ol>
+      <button id="installDone" class="primary">Got it</button>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "meta":{"generated":"demo","note":"Starter data. Run npm run sync-data to build the full recipe database from ao-data/ao-bin-dumps."},
+  "items":{
+    "T4_BAG":{"name":"Adept's Bag","kind":"craft","city":"Brecilien","itemValue":192,"amountCrafted":1,"silverCost":0,"materials":[{"id":"T4_CLOTH","name":"Fine Cloth","count":8,"returnable":true},{"id":"T4_LEATHER","name":"Worked Leather","count":8,"returnable":true}]},
+    "T5_BAG":{"name":"Expert's Bag","kind":"craft","city":"Brecilien","itemValue":384,"amountCrafted":1,"silverCost":0,"materials":[{"id":"T5_CLOTH","name":"Ornate Cloth","count":8,"returnable":true},{"id":"T5_LEATHER","name":"Cured Leather","count":8,"returnable":true}]},
+    "T4_ARMOR_LEATHER_SET1":{"name":"Adept's Mercenary Jacket","kind":"craft","city":"Thetford","itemValue":384,"amountCrafted":1,"silverCost":0,"materials":[{"id":"T4_LEATHER","name":"Worked Leather","count":16,"returnable":true}]},
+    "T4_MAIN_AXE":{"name":"Adept's Battleaxe","kind":"craft","city":"Martlock","itemValue":384,"amountCrafted":1,"silverCost":0,"materials":[{"id":"T4_METALBAR","name":"Steel Bar","count":16,"returnable":true}]},
+    "T4_2H_CROSSBOW":{"name":"Adept's Crossbow","kind":"craft","city":"Bridgewatch","itemValue":768,"amountCrafted":1,"silverCost":0,"materials":[{"id":"T4_PLANKS","name":"Pine Planks","count":20,"returnable":true},{"id":"T4_METALBAR","name":"Steel Bar","count":12,"returnable":true}]},
+    "T4_FIRESTAFF":{"name":"Adept's Fire Staff","kind":"craft","city":"Thetford","itemValue":384,"amountCrafted":1,"silverCost":0,"materials":[{"id":"T4_PLANKS","name":"Pine Planks","count":16,"returnable":true}]},
+    "T4_METALBAR":{"name":"Steel Bar","kind":"refine","city":"Thetford","itemValue":16,"amountCrafted":1,"silverCost":0,"materials":[{"id":"T4_ORE","name":"Iron Ore","count":2,"returnable":true},{"id":"T3_METALBAR","name":"Bronze Bar","count":1,"returnable":true}]},
+    "T4_LEATHER":{"name":"Worked Leather","kind":"refine","city":"Martlock","itemValue":16,"amountCrafted":1,"silverCost":0,"materials":[{"id":"T4_HIDE","name":"Heavy Hide","count":2,"returnable":true},{"id":"T3_LEATHER","name":"Stiff Leather","count":1,"returnable":true}]},
+    "T4_CLOTH":{"name":"Fine Cloth","kind":"refine","city":"Lymhurst","itemValue":16,"amountCrafted":1,"silverCost":0,"materials":[{"id":"T4_FIBER","name":"Hemp","count":2,"returnable":true},{"id":"T3_CLOTH","name":"Neat Cloth","count":1,"returnable":true}]},
+    "T4_PLANKS":{"name":"Pine Planks","kind":"refine","city":"Fort Sterling","itemValue":16,"amountCrafted":1,"silverCost":0,"materials":[{"id":"T4_WOOD","name":"Pine Logs","count":2,"returnable":true},{"id":"T3_PLANKS","name":"Chestnut Planks","count":1,"returnable":true}]},
+    "T4_STONEBLOCK":{"name":"Travertine Block","kind":"refine","city":"Bridgewatch","itemValue":16,"amountCrafted":1,"silverCost":0,"materials":[{"id":"T4_ROCK","name":"Travertine","count":2,"returnable":true},{"id":"T3_STONEBLOCK","name":"Sandstone Block","count":1,"returnable":true}]}
+  }
+}
