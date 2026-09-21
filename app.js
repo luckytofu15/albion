@@ -4,6 +4,45 @@ const HOSTS = {
   east:"https://east.albion-online-data.com",
   europe:"https://europe.albion-online-data.com"
 };
+/*__TRAVEL_PURE_START__*/
+/* Fast-travel cost estimation. The NPC fee depends on cargo weight × distance.
+   Weights and distances below are rough estimates — the plan lets the user
+   adjust the kg per leg and the silver rate, and the app remembers the rate. */
+const TRAVEL_RATE_KEY='albionProfitRadarTravelRate';
+const TRAVEL_RATE_DEFAULT=12; /* silver per kg per distance unit — starting estimate */
+const WEIGHT_EST={
+  raw:{2:.2,3:.3,4:.5,5:.8,6:1.2,7:1.8,8:2.7},      /* ORE/WOOD/HIDE/FIBER/STONE */
+  refined:{2:.8,3:1.2,4:2,5:3,6:4.5,7:6.8,8:10},     /* METALBAR/PLANKS/LEATHER/CLOTH */
+  gear:{2:2,3:3.5,4:7,5:10,6:14,7:20,8:28}           /* crafted items */
+};
+const RAW_SUFFIX=['ORE','WOOD','HIDE','FIBER','STONE'];
+const REFINED_SUFFIX=['METALBAR','PLANKS','LEATHER','CLOTH'];
+function itemWeightKg(id){
+  const m=/^T(\d+)_(.+)$/.exec(id||''); if(!m) return 1;
+  const tier=Math.min(8,Math.max(2,+m[1])), base=m[2];
+  const cls=RAW_SUFFIX.includes(base)?'raw':REFINED_SUFFIX.includes(base)?'refined':'gear';
+  return WEIGHT_EST[cls][tier] ?? 1;
+}
+/* Relative distances between royal cities (symmetric, arbitrary units). */
+const CITY_DIST={
+  'Bridgewatch|Caerleon':1,'Bridgewatch|Fort Sterling':2,'Bridgewatch|Lymhurst':1,'Bridgewatch|Martlock':2,'Bridgewatch|Thetford':2,
+  'Caerleon|Fort Sterling':2,'Caerleon|Lymhurst':2,'Caerleon|Martlock':2,'Caerleon|Thetford':1,
+  'Fort Sterling|Lymhurst':2,'Fort Sterling|Martlock':1,'Fort Sterling|Thetford':1,
+  'Lymhurst|Martlock':1,'Lymhurst|Thetford':2,'Martlock|Thetford':2
+};
+function cityDist(a,b){
+  if(a===b) return 0;
+  const x=a==='Black Market'?'Caerleon':a, y=b==='Black Market'?'Caerleon':b;
+  if(x===y) return 0;
+  if(x==='Brecilien'||y==='Brecilien') return 3;
+  return CITY_DIST[[x,y].sort().join('|')] ?? 2;
+}
+function travelRate(){
+  try{ const v=+(localStorage.getItem(TRAVEL_RATE_KEY) ?? TRAVEL_RATE_DEFAULT); return v>0?v:TRAVEL_RATE_DEFAULT; }
+  catch{ return TRAVEL_RATE_DEFAULT; }
+}
+function setTravelRate(v){ try{ localStorage.setItem(TRAVEL_RATE_KEY,String(v)); }catch{} }
+/*__TRAVEL_PURE_END__*/
 const FALLBACK_RECIPES = {
   T4_BAG:{name:"Adept's Bag",kind:"craft",city:"Bridgewatch",amountCrafted:1,itemValue:192,materials:[{id:"T4_LEATHER",count:8,returnable:true},{id:"T4_CLOTH",count:8,returnable:true}]},
   T5_MAIN_AXE:{name:"Expert's Battleaxe",kind:"craft",city:"Thetford",amountCrafted:1,itemValue:384,materials:[{id:"T5_METALBAR",count:16,returnable:true},{id:"T5_PLANKS",count:8,returnable:true}]},
@@ -299,18 +338,36 @@ state.trades=loadTrades(); state.plan=null; state.doneTrade=null; state.filtered
 function openSheet(name){$(name+'Backdrop').hidden=false;requestAnimationFrame(()=>$(name+'Sheet').classList.add('open'))}
 function closeSheet(name){$(name+'Sheet').classList.remove('open');setTimeout(()=>$(name+'Backdrop').hidden=true,220)}
 
+/* Travel legs for the open plan: {from,to,kg,d,fee}. fee starts as an
+   estimate (kg × distance × rate) and is editable per leg in the plan. */
+function computeLegs(){
+  const p=state.plan; if(!p) return [];
+  const r=p.row, q=p.qty, rate=travelRate(), legs=[];
+  const add=(from,to,kg)=>{
+    kg=Math.round(kg*10)/10; if(kg<=0) return;
+    const d=cityDist(from,to); if(d<=0) return;
+    legs.push({from,to,kg,d,fee:Math.round(kg*d*rate)});
+  };
+  if(r.kind==='flip') add(r.from,r.to,q*itemWeightKg(r.id));
+  else{
+    for(const [city,ms] of matGroups()) add(city,r.from,q*ms.reduce((s,m)=>s+m.count*itemWeightKg(m.id),0));
+    add(r.from,r.to,q*(r.amountCrafted||1)*itemWeightKg(r.id));
+  }
+  return legs;
+}
+function travelTotal(){ return (state.plan?.legs||[]).reduce((s,l)=>s+(+l.fee||0),0); }
 /* Per-unit math that recomputes honestly when the user overrides prices. */
 function planMath(){
-  const p=state.plan,r=p.row,setup=+$('setupFee').value/100;
+  const p=state.plan,r=p.row,setup=+$('setupFee').value/100,travel=travelTotal();
   if(r.kind==='flip'){
     const buySetup=r.entryOrder?p.buy*setup:0, sellFees=feesForSale(p.sell,r.exitOrder), risk=riskCost(p.buy);
-    const net=p.sell-p.buy-buySetup-sellFees-risk, base=p.buy+buySetup+risk;
-    return {cost:p.buy,fees:buySetup+sellFees+risk,net,roi:base>0?net/base*100:0,matCost:p.buy,station:0};
+    const net=p.sell-p.buy-buySetup-sellFees-risk-travel, base=p.buy+buySetup+risk;
+    return {cost:p.buy,fees:buySetup+sellFees+risk+travel,net,roi:base>0?net/base*100:0,matCost:p.buy,station:0,travel};
   }
   const matCost=p.mats.reduce((s,m)=>s+m.eff*m.price+(m.fee||0),0), station=r.stationUnit||0, journal=r.journalUnit||0;
   const buy=matCost+station, sellFees=feesForSale(p.sell,r.exitOrder), risk=riskCost(buy);
-  const net=p.sell-sellFees-buy-risk+journal;
-  return {cost:buy,fees:sellFees+risk,net,roi:(buy+risk)>0?net/(buy+risk)*100:0,matCost,station};
+  const net=p.sell-sellFees-buy-risk+journal-travel;
+  return {cost:buy,fees:sellFees+risk+travel,net,roi:(buy+risk)>0?net/(buy+risk)*100:0,matCost,station,travel};
 }
 function matGroups(){
   const g=new Map();
@@ -324,13 +381,26 @@ function openPlan(r){
 function planSummaryHtml(m){
   const q=state.plan.qty, in_=Math.round(m.cost*q), fees=Math.round(m.fees*q), out=Math.round(state.plan.sell*q), net=Math.round(m.net*q);
   return `<div class="ps-row"><span>Silver in (total cost)</span><b>−${money(in_)}</b></div>
+  <div class="ps-row"><span>Fast travel</span><b>${m.travel>0?`−${money(Math.round(m.travel*q))}`:'—'}</b></div>
   <div class="ps-row"><span>Fees & tax</span><b>−${money(fees)}</b></div>
   <div class="ps-row"><span>Silver out (total sell)</span><b>+${money(out)}</b></div>
   <div class="ps-row ps-net"><span>Net profit</span><b class="${net>=0?'money-pos':'money-neg'}">${net>=0?'+':''}${money(net)} silver</b></div>
   <div class="ps-row"><span>Return on investment</span><b class="${m.roi>=0?'money-pos':'money-neg'}">${pct(m.roi)}</b></div>`;
 }
+function travelStepHtml(num){
+  const p=state.plan, legs=p.legs||[];
+  const body=legs.length?legs.map((l,i)=>`
+    <div class="price-line travel-leg"><span>${escapeHtml(l.from)} → ${escapeHtml(l.to)}</span>
+      <input type="number" inputmode="decimal" min="0" step="1" data-legkg="${i}" value="${l.kg}" aria-label="Cargo weight in kg"><span class="silver-tag">kg</span>
+      <span class="mat-total">× ${l.d} dist ≈</span>
+      <input type="number" inputmode="decimal" min="0" step="1" data-legfee="${i}" value="${l.fee}" aria-label="Travel fee in silver"><span class="silver-tag">silver</span>
+    </div>`).join('')
+    :`<div class="step-sub">No travel needed — everything happens in ${escapeHtml(p.row.from)}.</div>`;
+  return `<div class="plan-step"><span class="step-num">${num}</span><div class="step-body"><b>Fast-travel — the NPC charges by cargo weight × distance:</b>${body}
+    <div class="step-sub">Rate <input type="number" id="travelRate" class="rate-input" inputmode="decimal" min="0" step="1" value="${travelRate()}"> silver per kg per distance unit. Weights are estimates — set the fee from the NPC price once and the app remembers your rate.</div></div></div>`;
+}
 function renderPlan(){
-  const p=state.plan; if(!p)return; const r=p.row,m=planMath();
+  const p=state.plan; if(!p)return; p.legs=computeLegs(); const r=p.row,m=planMath();
   $('planTitle').textContent=`${r.name} ×${p.qty}`;
   $('planMeta').textContent=`${r.from} → ${r.to} · ${r.kind.toUpperCase()}`;
   let steps='';
@@ -338,7 +408,7 @@ function renderPlan(){
     steps+=`<div class="plan-step"><span class="step-num">1</span><div class="step-body"><b>Go to ${escapeHtml(r.from)} market — ${r.entryOrder?'place a buy order':'buy now'}:</b>
       <div class="price-line"><span>${p.qty}× ${escapeHtml(r.name)} @</span><input type="number" id="planBuy" inputmode="decimal" min="0" value="${p.buy}"><span class="silver-tag">silver</span></div>
       <div class="step-sub">Total buy: <b id="planBuyTotal">${money(p.buy*p.qty)} silver</b></div></div></div>
-    <div class="plan-step"><span class="step-num">2</span><div class="step-body"><b>Fast-travel to ${escapeHtml(r.to)}.</b><div class="step-sub">Carry the items. Transport risk is already priced into the profit below.</div></div></div>`;
+    ${travelStepHtml(2)}`;
   }else{
     const groups=matGroups();
     steps+=`<div class="plan-step"><span class="step-num">1</span><div class="step-body"><b>Go to the market and ${r.entryOrder?'place buy orders':'buy'}:</b>`;
@@ -347,8 +417,7 @@ function renderPlan(){
       for(const mt of ms) steps+=`<div class="price-line mat"><span>${mt.count*p.qty}× ${escapeHtml(mt.name)} @</span><input type="number" inputmode="decimal" min="0" data-mat="${escapeHtml(mt.id)}" value="${mt.price}"><span class="silver-tag">silver</span><span class="mat-total" data-mat-total="${escapeHtml(mt.id)}">= ${money(mt.eff*mt.price*p.qty)}</span></div>`;
     }
     steps+=`<div class="step-sub">Materials total: <b id="planMatTotal">${money(m.matCost*p.qty)} silver</b></div></div></div>`;
-    const needMove=groups.some(([c])=>c!==r.from);
-    steps+=`<div class="plan-step"><span class="step-num">2</span><div class="step-body"><b>${needMove?`Bring all materials to ${escapeHtml(r.from)}.`:`Materials are already in ${escapeHtml(r.from)} — no travel needed.`}</b></div></div>`;
+    steps+=travelStepHtml(2);
     steps+=`<div class="plan-step"><span class="step-num">3</span><div class="step-body"><b>Craft ${p.qty}× ${escapeHtml(r.name)} at ${escapeHtml(r.from)}.</b><div class="step-sub">Station cost ≈ <b>${money((r.stationUnit||0)*p.qty)} silver</b></div></div></div>`;
   }
   const sellStep=r.kind==='flip'?3:4;
@@ -377,18 +446,39 @@ function bindPlanInputs(){
   document.querySelectorAll('#planBody [data-mat]').forEach(inp=>inp.addEventListener('input',e=>{
     const mt=state.plan.mats.find(x=>x.id===inp.dataset.mat); if(mt)mt.price=Math.max(0,+e.target.value||0); updatePlanNumbers();
   }));
+  document.querySelectorAll('#planBody [data-legkg]').forEach(inp=>inp.addEventListener('input',()=>{
+    const l=state.plan.legs[+inp.dataset.legkg]; if(!l)return;
+    l.kg=Math.max(0,+inp.value||0); l.fee=Math.round(l.kg*l.d*travelRate());
+    const feeInp=document.querySelector(`#planBody [data-legfee="${inp.dataset.legkg}"]`); if(feeInp)feeInp.value=l.fee;
+    updatePlanNumbers();
+  }));
+  document.querySelectorAll('#planBody [data-legfee]').forEach(inp=>inp.addEventListener('input',()=>{
+    const l=state.plan.legs[+inp.dataset.legfee]; if(!l)return;
+    l.fee=Math.max(0,Math.round(+inp.value||0)); updatePlanNumbers();
+  }));
+  const tr=$('travelRate');
+  if(tr)tr.addEventListener('input',()=>{
+    const v=Math.max(0,+tr.value||0); setTravelRate(v);
+    state.plan.legs.forEach(l=>{l.fee=Math.round(l.kg*l.d*v)});
+    document.querySelectorAll('#planBody [data-legfee]').forEach((inp,i)=>{inp.value=state.plan.legs[i].fee});
+    updatePlanNumbers();
+  });
+}
+function travelStepLine(){
+  const legs=state.plan.legs||[];
+  return legs.length?`Fast-travel: ${legs.map(l=>`${l.from} → ${l.to} (${l.kg} kg, ${money(l.fee)} silver)`).join(' · ')}`:'No fast travel needed';
 }
 function planStepTexts(){
   const p=state.plan,r=p.row,m=planMath(),q=p.qty;
   if(r.kind==='flip')return[
     `At ${r.from} market — ${r.entryOrder?'place buy order':'buy'}: ${q}× ${r.name} @ ${money(p.buy)} = ${money(p.buy*q)} silver`,
-    `Fast-travel to ${r.to}`,
+    travelStepLine(),
     `At ${r.to} market — ${r.exitOrder?'place sell order':'instant sell'}: ${q}× @ ${money(p.sell)} = ${money(p.sell*q)} silver`
   ];
   const groups=matGroups();
   return[
     groups.map(([city,ms])=>`At ${city} market — ${r.entryOrder?'place buy order':'buy'}: ${ms.map(mt=>`${mt.count*q}× ${mt.name} @ ${money(mt.price)}`).join(', ')}`).join('  •  '),
-    groups.some(([c])=>c!==r.from)?`Carry all materials to ${r.from}`:`Materials already in ${r.from}`,
+    travelStepLine(),
     `Craft ${q}× ${r.name} at ${r.from} (station ≈ ${money((r.stationUnit||0)*q)} silver)`,
     `At ${r.to} market — ${r.exitOrder?'place sell order':'instant sell'}: ${q}× @ ${money(p.sell)} = ${money(p.sell*q)} silver`
   ];
@@ -396,7 +486,7 @@ function planStepTexts(){
 function startTrade(){
   const p=state.plan; if(!p)return; const r=p.row,m=planMath(),q=p.qty;
   state.trades.unshift({id:'t'+Date.now(),at:Date.now(),name:r.name,itemId:r.id,kind:r.kind,from:r.from,to:r.to,qty:q,
-    plan:{cost:Math.round(m.cost*q),fees:Math.round(m.fees*q),revenue:Math.round(p.sell*q),net:Math.round(m.net*q),roi:m.roi},
+    plan:{cost:Math.round(m.cost*q),fees:Math.round(m.fees*q),travel:Math.round(m.travel*q),revenue:Math.round(p.sell*q),net:Math.round(m.net*q),roi:m.roi,legs:(p.legs||[]).map(l=>({...l}))},
     steps:planStepTexts(),checked:[],status:'open',actual:null});
   saveTrades(); closeSheet('plan'); renderLog(); scrollToId('logSection');
 }
